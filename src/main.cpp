@@ -55,8 +55,8 @@ WiFiManagerParameter _DATABASE_URL("influxDbBucket", "Enter your Firebase Databa
 #define FREQ_PIN_FAN2 5
 #define FREQ_PIN_FAN3 6
 #define FREQ_PIN_FAN4 7
-#define FREQ_PIN_FAN5 15 // 15 den aldım bunu
-#define FREQ_PIN_FAN6 16 // 16 den aldım bunu
+#define FREQ_PIN_FAN5 15
+#define FREQ_PIN_FAN6 16
 
 #define PCNT_H_LIM_VAL overflow_fan1
 #define PCNT_H_LIM_VAL overflow_fan2
@@ -92,7 +92,6 @@ String staticReadingsPath = "/staticReadings";
 String dynamicReadingsPath = "/dynamicReadings";
 
 String parentStaticReadingsPath, parentDynamicReadingsPath;
-String rpmSubPath;
 int timestamp;
 
 const char *ntpServer = "0.tr.pool.ntp.org"; // tr ye aldım
@@ -147,7 +146,6 @@ const int coefficientMovingAverage = 10;
 int readings [coefficientMovingAverage];
 int readIndex = 0;
 long total = 0;
-int aisVal = 0;
 
 long currentMillis = 0;
 long previousMillis = 0;
@@ -537,6 +535,7 @@ float calculateRpmFan4()
 
 float calculateRpmFan5() 
 {
+  //pinMode(FREQ_PIN_FAN5, INPUT);
   interruptCounterFan5 = 0;
   attachInterrupt(digitalPinToInterrupt(FREQ_PIN_FAN5), countUpFan5, RISING);
   delay(1000);
@@ -548,6 +547,7 @@ float calculateRpmFan5()
 
 float calculateRpmFan6() 
 {
+  //pinMode(FREQ_PIN_FAN6, INPUT);
   interruptCounterFan6 = 0;
   attachInterrupt(digitalPinToInterrupt(FREQ_PIN_FAN6), countUpFan6, RISING);
   delay(1000);
@@ -654,7 +654,6 @@ void showFirstScreen(void)
   lcd.print("%");
   int temp3 = round(humidity);
   lcd.print(temp3);
-
 }
 
 void showSecondScreen(void)
@@ -979,6 +978,8 @@ void setup()
   pcnt_init_fan3();
   pcnt_init_fan4();
   initFlowMeter();
+  pinMode(FREQ_PIN_FAN5, INPUT);
+  pinMode(FREQ_PIN_FAN6, INPUT);
 
   delay(1000);
 }
