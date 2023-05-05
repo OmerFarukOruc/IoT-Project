@@ -535,7 +535,6 @@ float calculateRpmFan4()
 
 float calculateRpmFan5() 
 {
-  //pinMode(FREQ_PIN_FAN5, INPUT);
   interruptCounterFan5 = 0;
   attachInterrupt(digitalPinToInterrupt(FREQ_PIN_FAN5), countUpFan5, RISING);
   delay(1000);
@@ -547,7 +546,6 @@ float calculateRpmFan5()
 
 float calculateRpmFan6() 
 {
-  //pinMode(FREQ_PIN_FAN6, INPUT);
   interruptCounterFan6 = 0;
   attachInterrupt(digitalPinToInterrupt(FREQ_PIN_FAN6), countUpFan6, RISING);
   delay(1000);
@@ -893,7 +891,7 @@ void initAPMode(void)
   wifiManager.setClass("invert");
   wifiManager.setScanDispPerc(true);
   wifiManager.setConfigPortalTimeout(180);
-
+  
   wifiManager.addParameter(&_USER_EMAIL);
   wifiManager.addParameter(&_USER_PASSWORD);
   wifiManager.addParameter(&_API_KEY);
