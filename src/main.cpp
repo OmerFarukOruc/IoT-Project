@@ -773,19 +773,19 @@ void firebaseSendData(void)
     Serial.println(timestamp);
 
     parentStaticReadingsPath = databaseStaticReadingsPath;
-    parentDynamicReadingsPath = databaseDynamicReadingsPath + "/" + String(timestamp);
+    parentDynamicReadingsPath = databaseDynamicReadingsPath + "/" + timestamp;
 
-    jsonDynamic.set(temperatureOutsidePath.c_str(), String(outsideTemperature));
-    jsonDynamic.set(humPath.c_str(), String(humidity));
-    jsonDynamic.set(temperatureInsidePath.c_str(), String(temperatureProbe));
-    jsonDynamic.set(timePath, String(timestamp));
+    jsonDynamic.set(temperatureOutsidePath.c_str(), outsideTemperature);
+    jsonDynamic.set(humPath.c_str(), humidity);
+    jsonDynamic.set(temperatureInsidePath.c_str(), temperatureProbe);
+    jsonDynamic.set(timePath, timestamp);
     
-    jsonStatic.set(rpmPath1.c_str(), String(calculateRpmFan1()));
-    jsonStatic.set(rpmPath2.c_str(), String(calculateRpmFan2()));
-    jsonStatic.set(rpmPath3.c_str(), String(calculateRpmFan3()));
-    jsonStatic.set(rpmPath4.c_str(), String(calculateRpmFan4()));
-    jsonStatic.set(rpmPath5.c_str(), String(calculateRpmFan5()));
-    jsonStatic.set(rpmPath6.c_str(), String(calculateRpmFan6()));
+    jsonStatic.set(rpmPath1.c_str(), calculateRpmFan1());
+    jsonStatic.set(rpmPath2.c_str(), calculateRpmFan2());
+    jsonStatic.set(rpmPath3.c_str(), calculateRpmFan3());
+    jsonStatic.set(rpmPath4.c_str(), calculateRpmFan4());
+    jsonStatic.set(rpmPath5.c_str(), calculateRpmFan5());
+    jsonStatic.set(rpmPath6.c_str(), calculateRpmFan6());
 
     Serial.printf("Set json... %s\n", Firebase.RTDB.setJSON(&fbdo, parentStaticReadingsPath.c_str(), &jsonStatic) ? "ok" : fbdo.errorReason().c_str());
     Serial.printf("Set json... %s\n", Firebase.RTDB.setJSON(&fbdo, parentDynamicReadingsPath.c_str(), &jsonDynamic) ? "ok" : fbdo.errorReason().c_str());
