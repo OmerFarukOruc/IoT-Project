@@ -52,12 +52,12 @@ WiFiManagerParameter _DATABASE_URL("influxDbBucket", "Enter your Firebase Databa
 #define buttonPin 38 // GPIO23 pin connected to button http://espblockly.com/ButtonLongPress.html#How_To_Detect_Long_Press 23 den aldım.
 #define flowMeterPin 2
 
-#define FREQ_PIN_FAN1 4
-#define FREQ_PIN_FAN2 5
-#define FREQ_PIN_FAN3 6
-#define FREQ_PIN_FAN4 7
-#define FREQ_PIN_FAN5 15 // 15 den aldım bunu
-#define FREQ_PIN_FAN6 16 // 16 den aldım bunu
+#define FREQ_PIN_FAN1 GPIO_NUM_4
+#define FREQ_PIN_FAN2 GPIO_NUM_5
+#define FREQ_PIN_FAN3 GPIO_NUM_6
+#define FREQ_PIN_FAN4 GPIO_NUM_7
+#define FREQ_PIN_FAN5 GPIO_NUM_15 // 15 den aldım bunu
+#define FREQ_PIN_FAN6 GPIO_NUM_16 // 16 den aldım bunu
 
 FirebaseData fbdo;
 FirebaseJson jsonStatic, jsonDynamic;
@@ -283,8 +283,6 @@ void pcnt_get_counter(void *arg)
 
 void pcnt_init_fan1(void)                                                     
 {  
-  pinMode(FREQ_PIN_FAN1, INPUT);
-
   _pcnt_config_t pcnt_config_fan1;
   pcnt_config(&pcnt_config_fan1, FREQ_PIN_FAN1, PCNT_UNIT_0);
 
@@ -309,8 +307,6 @@ void pcnt_init_fan1(void)
 
 void pcnt_init_fan2(void)                                                     
 {  
-  pinMode(FREQ_PIN_FAN2, INPUT);
-
   _pcnt_config_t pcnt_config_fan2;
   pcnt_config(&pcnt_config_fan2, FREQ_PIN_FAN2, PCNT_UNIT_1);
 
@@ -336,7 +332,6 @@ void pcnt_init_fan2(void)
 
 void pcnt_init_fan3(void)                                                     
 {  
-  pinMode(FREQ_PIN_FAN3, INPUT);
   _pcnt_config_t pcnt_config_fan3;
   pcnt_config(&pcnt_config_fan3, FREQ_PIN_FAN3, PCNT_UNIT_2);
   pcnt_isr_register_custom(PCNT_UNIT_2, &overflow_cnt_fan3, &timer_mux_fan3);
@@ -361,8 +356,6 @@ void pcnt_init_fan3(void)
 
 void pcnt_init_fan4(void)                                                     
 {  
-  pinMode(FREQ_PIN_FAN4, INPUT);
-
   _pcnt_config_t pcnt_config_fan4;
   pcnt_config(&pcnt_config_fan4, FREQ_PIN_FAN4, PCNT_UNIT_3);
   pcnt_isr_register_custom(PCNT_UNIT_3, &overflow_cnt_fan4, &timer_mux_fan4);
@@ -383,6 +376,29 @@ void pcnt_init_fan4(void)
     //ESP_LOGE(TAG, "timer create");
   }
 }
+
+void pcnt_init_fan_generic(_pcnt_config_t *pcnt_config, pcnt_unit_t unit, int freq_pin, 
+                          uint32_t *overflow_cnt, portMUX_TYPE *timer_mux, uint16_t *result, bool *flag, esp_timer_handle_t *timer_handle) 
+ {
+    pcnt_isr_register_custom(unit, overflow_cnt, timer_mux);
+    pcnt_set_filter_value(unit, 1000);
+    pcnt_filter_enable(unit); 
+    pcnt_counter_pause(unit);                                       
+    pcnt_counter_clear(unit);                                       
+    pcnt_event_enable(unit, PCNT_EVT_H_LIM);                        
+    pcnt_counter_resume(unit);                                       
+
+    esp_timer_create_args_t timer_args;
+    timer_args.callback = pcnt_get_counter;
+    timer_args.arg      = new std::tuple<pcnt_unit_t, uint16_t *, bool *>(unit, result, flag);
+    timer_args.name     = "one shot timer";
+
+    if(esp_timer_create(&timer_args, timer_handle) != ESP_OK) 
+    {
+        //ESP_LOGE(TAG, "timer create");
+    }
+}
+
 
 float calculateRpmFan1()
 {
@@ -849,6 +865,15 @@ void initRelay(void)
   pinMode(pinRelay, OUTPUT);
 }
 
+void pcnt_init_all_fans(void) 
+{
+  _pcnt_config_t pcnt_config_fan1, pcnt_config_fan2, pcnt_config_fan3, pcnt_config_fan4;
+  pcnt_init_fan_generic(&pcnt_config_fan1, PCNT_UNIT_0, FREQ_PIN_FAN1, &overflow_cnt_fan1, &timer_mux_fan1, &result_fan1, &flag_fan1, &timer_handle_fan1);
+  pcnt_init_fan_generic(&pcnt_config_fan2, PCNT_UNIT_1, FREQ_PIN_FAN2, &overflow_cnt_fan2, &timer_mux_fan2, &result_fan2, &flag_fan2, &timer_handle_fan2);
+  pcnt_init_fan_generic(&pcnt_config_fan3, PCNT_UNIT_2, FREQ_PIN_FAN3, &overflow_cnt_fan3, &timer_mux_fan3, &result_fan3, &flag_fan3, &timer_handle_fan3);
+  pcnt_init_fan_generic(&pcnt_config_fan4, PCNT_UNIT_3, FREQ_PIN_FAN4, &overflow_cnt_fan4, &timer_mux_fan4, &result_fan4, &flag_fan4, &timer_handle_fan4);
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -904,12 +929,13 @@ void setup()
   Serial.print("Chip ID: ");
   Serial.println(chipId);
 
-  pcnt_init_fan1();
-  pcnt_init_fan2();
-  pcnt_init_fan3();
-  pcnt_init_fan4();
+  pcnt_init_all_fans();
   initFlowMeter();
-  
+
+  pinMode(FREQ_PIN_FAN1, INPUT);
+  pinMode(FREQ_PIN_FAN2, INPUT);
+  pinMode(FREQ_PIN_FAN3, INPUT);
+  pinMode(FREQ_PIN_FAN4, INPUT);
   pinMode(FREQ_PIN_FAN5, INPUT);
   pinMode(FREQ_PIN_FAN6, INPUT);
 
