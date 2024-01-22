@@ -1,3 +1,4 @@
+
 #include <Arduino.h>
 #include <Wire.h>
 #include <SHT31.h>
@@ -58,11 +59,6 @@ WiFiManagerParameter _DATABASE_URL("influxDbBucket", "Enter your Firebase Databa
 #define FREQ_PIN_FAN5 15 // 15 den aldım bunu
 #define FREQ_PIN_FAN6 16 // 16 den aldım bunu
 
-#define PCNT_H_LIM_VAL overflow_fan1
-#define PCNT_H_LIM_VAL overflow_fan2
-#define PCNT_H_LIM_VAL overflow_fan3
-#define PCNT_H_LIM_VAL overflow_fan4
-
 FirebaseData fbdo;
 FirebaseJson jsonStatic, jsonDynamic;
 FirebaseAuth auth;
@@ -105,35 +101,30 @@ uint32_t chipId = 0;
 
 bool wm_nonblocking = false;
 
-/* Setting PWM Properties */
-const int PWMFreq = 5000; /* 5 KHz */
+const int PWMFreq = 5000;
 const int PWMChannel = 0;
 const int PWMResolution = 8;
 
 bool            flag_fan1          = true;                                   
 uint32_t        overflow_fan1      = 20000;                                  
-int16_t         pulses_fan1        = 0;                                  
 uint32_t        overflow_cnt_fan1  = 0;                                        
 volatile double frequency_fan1     = 0;
 uint16_t result_fan1 = 0;
 
 bool            flag_fan2          = true;                                   
 uint32_t        overflow_fan2      = 20000;                                  
-int16_t         pulses_fan2        = 0;                                  
 uint32_t        overflow_cnt_fan2  = 0;                                        
 volatile double frequency_fan2     = 0;
 uint16_t result_fan2 = 0;
 
 bool            flag_fan3          = true;                                   
 uint32_t        overflow_fan3      = 20000;                                  
-int16_t         pulses_fan3        = 0;                                  
 uint32_t        overflow_cnt_fan3  = 0;                                        
 volatile double frequency_fan3     = 0;
 uint16_t result_fan3 = 0;
 
 bool            flag_fan4          = true;                                   
 uint32_t        overflow_fan4      = 20000;                                  
-int16_t         pulses_fan4        = 0;                                  
 uint32_t        overflow_cnt_fan4  = 0;                                        
 volatile double frequency_fan4    = 0;
 uint16_t result_fan4 = 0;
@@ -173,93 +164,48 @@ esp_timer_create_args_t timer_args_fan4;
 esp_timer_handle_t timer_handle_fan4;                                          
 portMUX_TYPE timer_mux_fan4 = portMUX_INITIALIZER_UNLOCKED;
 
-pcnt_config_t pcnt_config_fan1 = 
+typedef struct 
 {
-  .pulse_gpio_num    = FREQ_PIN_FAN1,
-  .ctrl_gpio_num     = -1,
-  .lctrl_mode        = PCNT_MODE_KEEP,
-  .hctrl_mode        = PCNT_MODE_KEEP,
-  .pos_mode          = PCNT_COUNT_INC,
-  .neg_mode          = PCNT_COUNT_INC,
-  .counter_h_lim     = 20000,
-  .counter_l_lim     = 0,
-  .unit              = PCNT_UNIT_0, 
-  .channel           = PCNT_CHANNEL_0
-  };
+  int pulse_gpio_num;
+  int ctrl_gpio_num;
+  pcnt_ctrl_mode_t lctrl_mode;
+  pcnt_ctrl_mode_t hctrl_mode;
+  pcnt_count_mode_t pos_mode;
+  pcnt_count_mode_t neg_mode;
+  uint16_t counter_h_lim;
+  uint16_t counter_l_lim;
+  pcnt_unit_t unit;
+  pcnt_channel_t channel;
+} my_pcnt_config_t;
 
-pcnt_config_t pcnt_config_fan2 = 
+void pcnt_config(my_pcnt_config_t* config, int pulse_gpio_num, pcnt_unit_t unit) 
 {
-  .pulse_gpio_num    = FREQ_PIN_FAN2,
-  .ctrl_gpio_num     = -1,
-  .lctrl_mode        = PCNT_MODE_KEEP,
-  .hctrl_mode        = PCNT_MODE_KEEP,
-  .pos_mode          = PCNT_COUNT_INC,
-  .neg_mode          = PCNT_COUNT_INC,
-  .counter_h_lim     = 20000,
-  .counter_l_lim     = 0,
-  .unit              = PCNT_UNIT_1, 
-  .channel           = PCNT_CHANNEL_0
-};
-
-pcnt_config_t pcnt_config_fan3 = 
-{
-  .pulse_gpio_num    = FREQ_PIN_FAN3,
-  .ctrl_gpio_num     = -1,
-  .lctrl_mode        = PCNT_MODE_KEEP,
-  .hctrl_mode        = PCNT_MODE_KEEP,
-  .pos_mode          = PCNT_COUNT_INC,
-  .neg_mode          = PCNT_COUNT_INC,
-  .counter_h_lim     = 20000,
-  .counter_l_lim     = 0,
-  .unit              = PCNT_UNIT_2, 
-  .channel           = PCNT_CHANNEL_0
-};
-
-pcnt_config_t pcnt_config_fan4 = 
-{
-  .pulse_gpio_num    = FREQ_PIN_FAN4,
-  .ctrl_gpio_num     = -1,
-  .lctrl_mode        = PCNT_MODE_KEEP,
-  .hctrl_mode        = PCNT_MODE_KEEP,
-  .pos_mode          = PCNT_COUNT_INC,
-  .neg_mode          = PCNT_COUNT_INC,
-  .counter_h_lim     = 20000,
-  .counter_l_lim     = 0,
-  .unit              = PCNT_UNIT_3, 
-  .channel           = PCNT_CHANNEL_0
-};
-
-void IRAM_ATTR pcnt_event_handler_fan1(void *arg)
-{
-  portENTER_CRITICAL_ISR(&timer_mux_fan1);
-  overflow_cnt_fan1++; 
-  PCNT.int_clr.val = BIT(PCNT_UNIT_0);
-  portEXIT_CRITICAL_ISR(&timer_mux_fan1);
-}     
-
-void IRAM_ATTR pcnt_event_handler_fan2(void *arg) 
-{
-  portENTER_CRITICAL_ISR(&timer_mux_fan2); 
-  overflow_cnt_fan2++;  
-  PCNT.int_clr.val = BIT(PCNT_UNIT_1); 
-  portEXIT_CRITICAL_ISR(&timer_mux_fan2); 
-}  
-
-void IRAM_ATTR pcnt_event_handler_fan3(void *arg)
-{
-  portENTER_CRITICAL_ISR(&timer_mux_fan3); 
-  overflow_cnt_fan3++; 
-  PCNT.int_clr.val = BIT(PCNT_UNIT_2); 
-  portEXIT_CRITICAL_ISR(&timer_mux_fan3);
+  config->pulse_gpio_num = pulse_gpio_num;
+  config->ctrl_gpio_num = -1;
+  config->lctrl_mode = PCNT_MODE_KEEP;
+  config->hctrl_mode = PCNT_MODE_KEEP;
+  config->pos_mode = PCNT_COUNT_INC;
+  config->neg_mode = PCNT_COUNT_INC;
+  config->counter_h_lim = 20000;
+  config->counter_l_lim = 0;
+  config->unit = unit;
+  config->channel = PCNT_CHANNEL_0;
 }
 
-void IRAM_ATTR pcnt_event_handler_fan4(void *arg)
+typedef my_pcnt_config_t _pcnt_config_t;
+
+void IRAM_ATTR pcnt_event_handler(void *arg)
 {
-  portENTER_CRITICAL_ISR(&timer_mux_fan4); 
-  overflow_cnt_fan4++; 
-  PCNT.int_clr.val = BIT(PCNT_UNIT_3); 
-  portEXIT_CRITICAL_ISR(&timer_mux_fan4);
-} 
+  auto params = static_cast<std::tuple<pcnt_unit_t, volatile uint32_t *, portMUX_TYPE *> *>(arg);
+  pcnt_unit_t unit = std::get<0>(*params);
+  volatile uint32_t *overflow_cnt = std::get<1>(*params);
+  portMUX_TYPE *timer_mux = std::get<2>(*params);
+
+  portENTER_CRITICAL_ISR(timer_mux);
+  (*overflow_cnt)++;
+  PCNT.int_clr.val = BIT(unit);
+  portEXIT_CRITICAL_ISR(timer_mux);
+}
 
 void IRAM_ATTR pulseCounterForFlowMeter()
 {
@@ -317,40 +263,32 @@ float calculateFlowMeter()
   return flowRate;
 }
 
-void pcnt_get_counter_fan1(void *p) 
-{ 
-  pcnt_counter_pause(PCNT_UNIT_0);
-  pcnt_get_counter_value(PCNT_UNIT_0, (int16_t*) &result_fan1); 
-  flag_fan1 = true;
+esp_err_t pcnt_isr_register_custom(pcnt_unit_t unit, volatile uint32_t *overflow_cnt, portMUX_TYPE *timer_mux)
+{
+  auto params = new std::tuple<pcnt_unit_t, volatile uint32_t *, portMUX_TYPE *>(unit, overflow_cnt, timer_mux);
+  return pcnt_isr_register([](void *arg) { pcnt_event_handler(arg); }, params, 0, NULL);
 }
 
-void pcnt_get_counter_fan2(void *p) 
-{ 
-  pcnt_counter_pause(PCNT_UNIT_1);
-  pcnt_get_counter_value(PCNT_UNIT_1, (int16_t*) &result_fan2); 
-  flag_fan2 = true;
-}
+void pcnt_get_counter(void *arg)
+{
+  auto params = static_cast<std::tuple<pcnt_unit_t, int16_t *, bool *> *>(arg);
+  pcnt_unit_t unit = std::get<0>(*params);
+  int16_t *result = std::get<1>(*params);
+  bool *flag = std::get<2>(*params);
 
-void pcnt_get_counter_fan3(void *p) 
-{ 
-  pcnt_counter_pause(PCNT_UNIT_2);
-  pcnt_get_counter_value(PCNT_UNIT_2, (int16_t*) &result_fan3); 
-  flag_fan3 = true;
-}
-
-void pcnt_get_counter_fan4(void *p) 
-{ 
-  pcnt_counter_pause(PCNT_UNIT_3);
-  pcnt_get_counter_value(PCNT_UNIT_3, (int16_t*) &result_fan4); 
-  flag_fan4 = true;
+  pcnt_counter_pause(unit);
+  pcnt_get_counter_value(unit, result);
+  *flag = true;
 }
 
 void pcnt_init_fan1(void)                                                     
 {  
   pinMode(FREQ_PIN_FAN1, INPUT);
 
-  pcnt_unit_config(&pcnt_config_fan1);
-  pcnt_isr_register(pcnt_event_handler_fan1, NULL, 0, NULL);                   
+  _pcnt_config_t pcnt_config_fan1;
+  pcnt_config(&pcnt_config_fan1, FREQ_PIN_FAN1, PCNT_UNIT_0);
+
+  pcnt_isr_register_custom(PCNT_UNIT_0, &overflow_cnt_fan1, &timer_mux_fan1);                  
   pcnt_set_filter_value(PCNT_UNIT_0, 1000);
   pcnt_filter_enable(PCNT_UNIT_0); 
   pcnt_counter_pause(PCNT_UNIT_0);                                       
@@ -358,25 +296,25 @@ void pcnt_init_fan1(void)
   pcnt_event_enable(PCNT_UNIT_0, PCNT_EVT_H_LIM);                        
   pcnt_counter_resume(PCNT_UNIT_0);                                       
 
-  timer_args_fan1.callback = pcnt_get_counter_fan1;
-  timer_args_fan1.arg      = NULL;
+  timer_args_fan1.callback = pcnt_get_counter;
+  timer_args_fan2.arg      = new std::tuple<pcnt_unit_t, uint16_t *, bool *>(PCNT_UNIT_0, &result_fan1, &flag_fan1);
   timer_args_fan1.name     = "one shot timer";
 
   if(esp_timer_create(&timer_args_fan1, &timer_handle_fan1) != ESP_OK) 
   {
     //ESP_LOGE(TAG, "timer create");
   }
-
-  timer_args_fan1.callback = pcnt_get_counter_fan1; 
-  esp_timer_create(&timer_args_fan1, &timer_handle_fan1);                           
+                          
 }
 
 void pcnt_init_fan2(void)                                                     
 {  
   pinMode(FREQ_PIN_FAN2, INPUT);
 
-  pcnt_unit_config(&pcnt_config_fan2);
-  pcnt_isr_register(pcnt_event_handler_fan2, NULL, 0, NULL);               
+  _pcnt_config_t pcnt_config_fan2;
+  pcnt_config(&pcnt_config_fan2, FREQ_PIN_FAN2, PCNT_UNIT_1);
+
+  pcnt_isr_register_custom(PCNT_UNIT_1, &overflow_cnt_fan2, &timer_mux_fan2);           
   pcnt_intr_enable(PCNT_UNIT_1);  
   pcnt_set_filter_value(PCNT_UNIT_1, 1000);
   pcnt_filter_enable(PCNT_UNIT_1); 
@@ -385,8 +323,8 @@ void pcnt_init_fan2(void)
   pcnt_event_enable(PCNT_UNIT_1, PCNT_EVT_H_LIM);                        
   pcnt_counter_resume(PCNT_UNIT_1);                                    
 
-  timer_args_fan2.callback = pcnt_get_counter_fan2;
-  timer_args_fan2.arg      = NULL;
+  timer_args_fan2.callback = pcnt_get_counter;
+  timer_args_fan2.arg      = new std::tuple<pcnt_unit_t, uint16_t *, bool *>(PCNT_UNIT_1, &result_fan2, &flag_fan2);
   timer_args_fan2.name     = "one shot timer";
 
   if(esp_timer_create(&timer_args_fan2, &timer_handle_fan2) != ESP_OK) 
@@ -394,16 +332,14 @@ void pcnt_init_fan2(void)
     //ESP_LOGE(TAG, "timer create");
   }
 
-  timer_args_fan2.callback = pcnt_get_counter_fan2;
-  esp_timer_create(&timer_args_fan2, &timer_handle_fan2); 
 }
 
 void pcnt_init_fan3(void)                                                     
 {  
   pinMode(FREQ_PIN_FAN3, INPUT);
-
-  pcnt_unit_config(&pcnt_config_fan3);
-  pcnt_isr_register(pcnt_event_handler_fan3, NULL, 0, NULL);
+  _pcnt_config_t pcnt_config_fan3;
+  pcnt_config(&pcnt_config_fan3, FREQ_PIN_FAN3, PCNT_UNIT_2);
+  pcnt_isr_register_custom(PCNT_UNIT_2, &overflow_cnt_fan3, &timer_mux_fan3);
   pcnt_intr_enable(PCNT_UNIT_2);  
   pcnt_set_filter_value(PCNT_UNIT_2, 1000);
   pcnt_filter_enable(PCNT_UNIT_2); 
@@ -412,8 +348,8 @@ void pcnt_init_fan3(void)
   pcnt_event_enable(PCNT_UNIT_2, PCNT_EVT_H_LIM);                        
   pcnt_counter_resume(PCNT_UNIT_2);                                       
 
-  timer_args_fan3.callback = pcnt_get_counter_fan3;
-  timer_args_fan3.arg      = NULL;
+  timer_args_fan3.callback = pcnt_get_counter;
+  timer_args_fan3.arg      = new std::tuple<pcnt_unit_t, uint16_t *, bool *>(PCNT_UNIT_2, &result_fan3, &flag_fan3);
   timer_args_fan3.name     = "one shot timer";
 
   if(esp_timer_create(&timer_args_fan3, &timer_handle_fan3) != ESP_OK) 
@@ -421,16 +357,15 @@ void pcnt_init_fan3(void)
     //ESP_LOGE(TAG, "timer create");
   }
 
-  timer_args_fan3.callback = pcnt_get_counter_fan3;
-  esp_timer_create(&timer_args_fan3, &timer_handle_fan3); 
 }
 
 void pcnt_init_fan4(void)                                                     
 {  
   pinMode(FREQ_PIN_FAN4, INPUT);
 
-  pcnt_unit_config(&pcnt_config_fan4);
-  pcnt_isr_register(pcnt_event_handler_fan4, NULL, 0, NULL);
+  _pcnt_config_t pcnt_config_fan4;
+  pcnt_config(&pcnt_config_fan4, FREQ_PIN_FAN4, PCNT_UNIT_3);
+  pcnt_isr_register_custom(PCNT_UNIT_3, &overflow_cnt_fan4, &timer_mux_fan4);
   pcnt_intr_enable(PCNT_UNIT_3);  
   pcnt_set_filter_value(PCNT_UNIT_3, 1000);
   pcnt_filter_enable(PCNT_UNIT_3); 
@@ -439,17 +374,14 @@ void pcnt_init_fan4(void)
   pcnt_event_enable(PCNT_UNIT_3, PCNT_EVT_H_LIM);                        
   pcnt_counter_resume(PCNT_UNIT_3);                                       
 
-  timer_args_fan4.callback = pcnt_get_counter_fan4;
-  timer_args_fan4.arg      = NULL;
+  timer_args_fan4.callback = pcnt_get_counter;
+  timer_args_fan4.arg      = new std::tuple<pcnt_unit_t, uint16_t *, bool *>(PCNT_UNIT_3, &result_fan4, &flag_fan4);
   timer_args_fan4.name     = "one shot timer";
 
   if(esp_timer_create(&timer_args_fan4, &timer_handle_fan4) != ESP_OK) 
   {
     //ESP_LOGE(TAG, "timer create");
   }
-
-  timer_args_fan4.callback = pcnt_get_counter_fan4;
-  esp_timer_create(&timer_args_fan4, &timer_handle_fan4); 
 }
 
 float calculateRpmFan1()
@@ -594,7 +526,7 @@ void initSensors()
 {
   probe.begin();
   Wire.begin();
-  shtSensor.begin(0x44);
+  shtSensor.begin();
   Wire.setClock(100000);
 }
 
