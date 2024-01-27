@@ -278,7 +278,7 @@ void pcnt_init_fan_generic(_pcnt_config_t *pcnt_config, pcnt_unit_t unit, int fr
     }
 }
 
-float calculateRpmFan1()
+/*float calculateRpmFan1()
 {
   if (flag_fan1 == true)
   {
@@ -356,7 +356,64 @@ float calculateRpmFan4()
     esp_timer_start_once(timer_handle_fan4, 1000000);
   }
   return frequency_fan4 * 15;
+}*/
+
+float calculateRpmFan(int fanNumber, uint32_t *overflow_cnt, volatile double *frequency, pcnt_unit_t unit, esp_timer_handle_t *timer_handle) 
+{
+  bool flag_fan;
+  uint32_t overflow_cnt_fan;
+  double frequency_fan;
+
+  switch(fanNumber) {
+    case 1:
+      flag_fan = flag_fan1;
+      overflow_cnt_fan = overflow_cnt_fan1;
+      frequency_fan = frequency_fan1;
+      break;
+    case 2:
+      flag_fan = flag_fan2;
+      overflow_cnt_fan = overflow_cnt_fan2;
+      frequency_fan = frequency_fan2;
+      break;
+    case 3:
+      flag_fan = flag_fan3;
+      overflow_cnt_fan = overflow_cnt_fan3;
+      frequency_fan = frequency_fan3;
+      break;
+    case 4:
+      flag_fan = flag_fan4;
+      overflow_cnt_fan = overflow_cnt_fan4;
+      frequency_fan = frequency_fan4;
+      break;
+    case 5:
+      // Handle fan 5
+      break;
+    case 6:
+      // Handle fan 6
+      break;
+    default:
+      // Invalid fan number
+      return 0.0;
+  }
+
+  if (flag_fan == true)
+  {
+    flag_fan = false;
+    frequency_fan =  result_fan1 + (overflow_cnt_fan * 20000); 
+    overflow_cnt_fan = 0; 
+    pcnt_counter_clear(unit); 
+    pcnt_counter_resume(unit); 
+    overflow_cnt_fan = 0;    
+    
+    Serial.print(frequency_fan * 15);
+    Serial.println(" RPM FAN");
+
+    pcnt_counter_clear(unit);
+    esp_timer_start_once(*timer_handle, 1000000);
+  }
+  return frequency_fan * 15;
 }
+
 
 float calculateRpmFan5() 
 {
@@ -495,7 +552,12 @@ void showSecondScreen(void)
 
   lcd.setCursor(0, 2);
   lcd.print("FAN ORTALAMA: ");
-  int temp5 = round((calculateRpmFan1() + calculateRpmFan2() + calculateRpmFan3() + calculateRpmFan4() + calculateRpmFan5() + calculateRpmFan6()) / 6);
+  int temp5 = round((calculateRpmFan(1, &overflow_cnt_fan1, &frequency_fan1, PCNT_UNIT_0, &timer_handle_fan1) + 
+                     calculateRpmFan(2, &overflow_cnt_fan2, &frequency_fan2, PCNT_UNIT_1, &timer_handle_fan2) + 
+                     calculateRpmFan(3, &overflow_cnt_fan3, &frequency_fan3, PCNT_UNIT_2, &timer_handle_fan3) + 
+                     calculateRpmFan(4, &overflow_cnt_fan4, &frequency_fan4, PCNT_UNIT_3, &timer_handle_fan4) + 
+                     calculateRpmFan5() + 
+                     calculateRpmFan6()) / 6);
   lcd.print(temp5);
 }
 
@@ -508,16 +570,16 @@ void showThirdScreen(void)
 
   lcd.setCursor(0, 1);
   lcd.print("FAN1:");
-  int temp6 = round(calculateRpmFan1());
+  int temp6 = round(calculateRpmFan(1, &overflow_cnt_fan1, &frequency_fan1, PCNT_UNIT_0, &timer_handle_fan1));
   lcd.print(temp6);
   lcd.print(" ");
   lcd.print("FAN4:");
-  int temp7 = round(calculateRpmFan4());
+  int temp7 = round(calculateRpmFan(4, &overflow_cnt_fan4, &frequency_fan4, PCNT_UNIT_3, &timer_handle_fan4));
   lcd.print(temp7);
 
   lcd.setCursor(0, 2);
   lcd.print("FAN2:");
-  int temp8 = round(calculateRpmFan2());
+  int temp8 = round(calculateRpmFan(2, &overflow_cnt_fan2, &frequency_fan2, PCNT_UNIT_1, &timer_handle_fan2));
   lcd.print(temp8);
   lcd.print(" ");
   lcd.print("FAN5:");
@@ -526,7 +588,7 @@ void showThirdScreen(void)
 
   lcd.setCursor(0, 3);
   lcd.print("FAN3:");
-  int temp10 = round(calculateRpmFan3());
+  int temp10 = round(calculateRpmFan(3, &overflow_cnt_fan3, &frequency_fan3, PCNT_UNIT_2, &timer_handle_fan3));
   lcd.print(temp10);
   lcd.print(" ");
   lcd.print("FAN6:");
@@ -605,10 +667,10 @@ void firebaseSendData(void)
     jsonDynamic.set(temperatureInsidePath.c_str(), temperatureProbe);
     jsonDynamic.set(timePath, timestamp);
     
-    jsonStatic.set(rpmPath1.c_str(), calculateRpmFan1());
-    jsonStatic.set(rpmPath2.c_str(), calculateRpmFan2());
-    jsonStatic.set(rpmPath3.c_str(), calculateRpmFan3());
-    jsonStatic.set(rpmPath4.c_str(), calculateRpmFan4());
+    jsonStatic.set(rpmPath1.c_str(), calculateRpmFan(1, &overflow_cnt_fan1, &frequency_fan1, PCNT_UNIT_0, &timer_handle_fan1));
+    jsonStatic.set(rpmPath2.c_str(), calculateRpmFan(2, &overflow_cnt_fan2, &frequency_fan2, PCNT_UNIT_1, &timer_handle_fan2));
+    jsonStatic.set(rpmPath3.c_str(), calculateRpmFan(3, &overflow_cnt_fan3, &frequency_fan3, PCNT_UNIT_2, &timer_handle_fan3));
+    jsonStatic.set(rpmPath4.c_str(), calculateRpmFan(4, &overflow_cnt_fan4, &frequency_fan4, PCNT_UNIT_3, &timer_handle_fan4));
     jsonStatic.set(rpmPath5.c_str(), calculateRpmFan5());
     jsonStatic.set(rpmPath6.c_str(), calculateRpmFan6());
 
@@ -625,10 +687,10 @@ void firebaseSendData(void)
 
 void countRPM(void) 
 {
-  calculateRpmFan1();
-  calculateRpmFan2();
-  calculateRpmFan3();
-  calculateRpmFan4();
+  calculateRpmFan(1, &overflow_cnt_fan1, &frequency_fan1, PCNT_UNIT_0, &timer_handle_fan1);
+  calculateRpmFan(2, &overflow_cnt_fan2, &frequency_fan2, PCNT_UNIT_1, &timer_handle_fan2);
+  calculateRpmFan(3, &overflow_cnt_fan3, &frequency_fan3, PCNT_UNIT_2, &timer_handle_fan3);
+  calculateRpmFan(4, &overflow_cnt_fan4, &frequency_fan4, PCNT_UNIT_3, &timer_handle_fan4);
   calculateRpmFan5();
   calculateRpmFan6();
   
@@ -831,5 +893,11 @@ void loop()
   calculateFlowMeter();
   firebaseSendData();
   writeLcdScreen();
+  
+  calculateRpmFan(1, &overflow_cnt_fan1, &frequency_fan1, PCNT_UNIT_0, &timer_handle_fan1);
+  calculateRpmFan(2, &overflow_cnt_fan2, &frequency_fan2, PCNT_UNIT_1, &timer_handle_fan2);
+  calculateRpmFan(3, &overflow_cnt_fan3, &frequency_fan3, PCNT_UNIT_2, &timer_handle_fan3);
+  calculateRpmFan(4, &overflow_cnt_fan4, &frequency_fan4, PCNT_UNIT_3, &timer_handle_fan4);
+
   delay(1000);
 }
