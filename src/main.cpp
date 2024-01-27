@@ -1,4 +1,3 @@
-
 #include <Arduino.h>
 #include <Wire.h>
 #include <SHT31.h>
@@ -90,9 +89,9 @@ String dynamicReadingsPath = "/dynamicReadings";
 String parentStaticReadingsPath, parentDynamicReadingsPath;
 int timestamp;
 
-const char *ntpServer = "0.tr.pool.ntp.org"; // tr ye aldım
+const char *ntpServer = "0.tr.pool.ntp.org"; // dynamic setup the ntp server
 unsigned long sendDataPrevMillis = 0;
-unsigned long timerDelay = 5000; ///firebase'e ne aralıkla veri gönderilecek.
+unsigned long timerDelay = 5000; // the timer delay to send data in milliseconds
 
 SHT31 shtSensor;
 OneWire oneWire(oneWireBus);
@@ -106,25 +105,21 @@ const int PWMChannel = 0;
 const int PWMResolution = 8;
 
 bool            flag_fan1          = true;                                   
-uint32_t        overflow_fan1      = 20000;                                  
 uint32_t        overflow_cnt_fan1  = 0;                                        
 volatile double frequency_fan1     = 0;
 uint16_t result_fan1 = 0;
 
 bool            flag_fan2          = true;                                   
-uint32_t        overflow_fan2      = 20000;                                  
 uint32_t        overflow_cnt_fan2  = 0;                                        
 volatile double frequency_fan2     = 0;
 uint16_t result_fan2 = 0;
 
 bool            flag_fan3          = true;                                   
-uint32_t        overflow_fan3      = 20000;                                  
 uint32_t        overflow_cnt_fan3  = 0;                                        
 volatile double frequency_fan3     = 0;
 uint16_t result_fan3 = 0;
 
 bool            flag_fan4          = true;                                   
-uint32_t        overflow_fan4      = 20000;                                  
 uint32_t        overflow_cnt_fan4  = 0;                                        
 volatile double frequency_fan4    = 0;
 uint16_t result_fan4 = 0;
@@ -132,11 +127,6 @@ uint16_t result_fan4 = 0;
 volatile double frequency_fan5    = 0;
 volatile double frequency_fan6    = 0;
 volatile double average_fans = 0;
-
-const int coefficientMovingAverage = 10;
-int readings [coefficientMovingAverage];
-int readIndex = 0;
-long total = 0;
 
 long currentMillis = 0;
 long previousMillis = 0;
@@ -230,20 +220,6 @@ void saveParamsCallback()
   d = _DATABASE_URL.getValue();
 }
 
-long simpleMovingAverage() 
-{
-  total = total - readings[readIndex];
-  readings[readIndex] = rpm;
-  total = total + readings[readIndex];
-  readIndex = readIndex + 1;
-  if (readIndex >= coefficientMovingAverage) 
-  {
-    readIndex = 0;
-  }
-
-  return total / coefficientMovingAverage;
-}
-
 float calculateFlowMeter()
 {
   currentMillis = millis();
@@ -281,6 +257,26 @@ void pcnt_get_counter(void *arg)
   *flag = true;
 }
 
+void pcnt_init_fan_generic(_pcnt_config_t *pcnt_config, pcnt_unit_t unit, int freq_pin,uint32_t *overflow_cnt, portMUX_TYPE *timer_mux, uint16_t *result, bool *flag, esp_timer_handle_t *timer_handle) 
+ {
+    pcnt_isr_register_custom(unit, overflow_cnt, timer_mux);
+    pcnt_set_filter_value(unit, 1000);
+    pcnt_filter_enable(unit); 
+    pcnt_counter_pause(unit);                                       
+    pcnt_counter_clear(unit);                                       
+    pcnt_event_enable(unit, PCNT_EVT_H_LIM);                        
+    pcnt_counter_resume(unit);                                       
+
+    esp_timer_create_args_t timer_args;
+    timer_args.callback = pcnt_get_counter;
+    timer_args.arg      = new std::tuple<pcnt_unit_t, uint16_t *, bool *>(unit, result, flag);
+    timer_args.name     = "one shot timer";
+
+    if(esp_timer_create(&timer_args, timer_handle) != ESP_OK)
+    {
+        // ESP_LOGE(TAG, "timer create");
+    }
+}
 
 float calculateRpmFan1()
 {
@@ -298,7 +294,6 @@ float calculateRpmFan1()
 
     pcnt_counter_clear(PCNT_UNIT_0);
     esp_timer_start_once(timer_handle_fan1, 1000000);
-    
   }
   return frequency_fan1 * 15;
 }
