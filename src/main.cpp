@@ -23,6 +23,7 @@
 #include <addons/TokenHelper.h>
 #include <DallasTemperature.h>
 #include <OneWire.h>
+#include <Wire.h>
 
 #include "driver/pcnt.h"                                                
 #include "soc/pcnt_struct.h"
