@@ -1,4 +1,4 @@
-// TODO: ADD ALL FANS RPM
+// TODO: ADD ALL FANS RPM - DONE
 // TODO: ADD ALL TEMPERATURES
 // TODO: ADD HUMIDITY
 // TODO: ADD FLOWMETER
@@ -12,7 +12,6 @@
 // TODO: IMPLEMENT A LOGIC TO LOG DATA ONLINE(CLOUD) AND OFFLINE(SD CARD)
 // TODO: IMPLEMENT .h FILE FOR VARIABLES AND FUNCTIONS
 // TODO: IMPLEMENT CLASS FOR FANS, TEMPERATURES, HUMIDITY, FLOWMETER, RELAYS, LCD SCREEN, BUTTONS, LEDS, WIFI, FIREBASE, SD CARD (v2.0) / NOT URGENT
-
 
 // ------------------------ LIBRARIES ------------------------
 
@@ -528,10 +527,13 @@ void fanRpmTask(void *pvParameters)
   while(1) 
   {
     calculateRpmFan1();
+    vTaskDelay(250 / portTICK_RATE_MS);
     calculateRpmFan2();
+    vTaskDelay(250 / portTICK_RATE_MS);
     calculateRpmFan3();
+    vTaskDelay(250 / portTICK_RATE_MS);
     calculateRpmFan4();
-    vTaskDelay(1000 / portTICK_RATE_MS);
+    vTaskDelay(250 / portTICK_RATE_MS);
   }
 }
 
@@ -723,14 +725,15 @@ void setup()
   initWiFi();
 
   pcnt_init_fan1();
+  pcnt_init_fan2();
+  pcnt_init_fan3();
+  pcnt_init_fan4();
 
   xTaskCreatePinnedToCore(wifiTask,        "WiFi Task",         10000, NULL, 1, &wifiTaskHandle,     0);
   xTaskCreatePinnedToCore(resetButtonTask, "Reset Button Task", 10000, NULL, 1, &resetButtonHandle , 0);
   xTaskCreatePinnedToCore(firebaseTask,    "Firebase Task",     10000, NULL, 1, &firebaseTaskHandle, 0);
   xTaskCreatePinnedToCore(fanRpmTask,      "Fan Task",          10000, NULL, 1, &sensorTaskHandle,   0);
 }
-
-
 
 void loop() 
 {
