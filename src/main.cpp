@@ -31,13 +31,18 @@
 // ------------------------ DEFINES ------------------------
 
 #define FREQ_PIN_FAN1 4
+#define FREQ_PIN_FAN2 5
+#define FREQ_PIN_FAN3 6
+#define FREQ_PIN_FAN4 7
+#define FREQ_PIN_FAN5 15
+#define FREQ_PIN_FAN6 16
 #define oneWireBus 18
 
 // ------------------------ VARIABLES ------------------------
 
-TaskHandle_t wifiTaskHandle = NULL;
-TaskHandle_t resetButtonHandle = NULL;
-TaskHandle_t sensorTaskHandle = NULL;
+TaskHandle_t wifiTaskHandle     = NULL;
+TaskHandle_t resetButtonHandle  = NULL;
+TaskHandle_t fanRpmTask         = NULL;
 TaskHandle_t firebaseTaskHandle = NULL;
 
 FirebaseConfig firebaseConfig;
@@ -57,12 +62,6 @@ String parentStaticReadingsPath, parentDynamicReadingsPath;
 String UsersData = "/UsersData/", readingsPath = "/readings", staticReadingsPath = "/staticReadings", dynamicReadingsPath = "/dynamicReadings";
 String temperatureOutsidePath = "/temperatureOutside";
 String uid;
-String rpmPath1 = "/fans/fan1";
-String rpmPath2 = "/fans/fan2";
-String rpmPath3 = "/fans/fan3";
-String rpmPath4 = "/fans/fan4";
-String rpmPath5 = "/fans/fan5";
-String rpmPath6 = "/fans/fan6";
 
 const char *ntpServer = "0.tr.pool.ntp.org"; // dynamic setup the ntp server
 
@@ -72,6 +71,8 @@ int timestamp;
 
 OneWire oneWire(oneWireBus);
 DallasTemperature probe(&oneWire);
+
+// ------------------------ FAN1 ------------------------
 
 bool            flag_fan1             = true;                                   
 uint32_t        overflow_cnt_fan1     = 0;                                        
@@ -97,6 +98,84 @@ pcnt_config_t pcnt_config_fan1 =
   .channel           = PCNT_CHANNEL_0
 };
 
+// ------------------------ FAN2 ------------------------
+
+bool            flag_fan2             = true;                                   
+uint32_t        overflow_cnt_fan2     = 0;                                        
+volatile double frequency_fan2        = 0;
+double          global_frequency_fan2 = 0;
+uint16_t        result_fan2           = 0;
+
+esp_timer_create_args_t timer_args_fan2;
+esp_timer_handle_t timer_handle_fan2;
+portMUX_TYPE timer_mux_fan2 = portMUX_INITIALIZER_UNLOCKED;
+
+pcnt_config_t pcnt_config_fan2 = 
+{
+  .pulse_gpio_num    = FREQ_PIN_FAN2,
+  .ctrl_gpio_num     = -1,
+  .lctrl_mode        = PCNT_MODE_KEEP,
+  .hctrl_mode        = PCNT_MODE_KEEP,
+  .pos_mode          = PCNT_COUNT_INC,
+  .neg_mode          = PCNT_COUNT_INC,
+  .counter_h_lim     = 20000,
+  .counter_l_lim     = 0,
+  .unit              = PCNT_UNIT_1, 
+  .channel           = PCNT_CHANNEL_0
+};
+
+// ------------------------ FAN3 ------------------------
+
+bool            flag_fan3             = true;                                   
+uint32_t        overflow_cnt_fan3     = 0;                                        
+volatile double frequency_fan3        = 0;
+double          global_frequency_fan3 = 0;
+uint16_t        result_fan3           = 0;
+
+esp_timer_create_args_t timer_args_fan3;
+esp_timer_handle_t timer_handle_fan3;
+portMUX_TYPE timer_mux_fan3 = portMUX_INITIALIZER_UNLOCKED;
+
+pcnt_config_t pcnt_config_fan3 = 
+{
+  .pulse_gpio_num    = FREQ_PIN_FAN3,
+  .ctrl_gpio_num     = -1,
+  .lctrl_mode        = PCNT_MODE_KEEP,
+  .hctrl_mode        = PCNT_MODE_KEEP,
+  .pos_mode          = PCNT_COUNT_INC,
+  .neg_mode          = PCNT_COUNT_INC,
+  .counter_h_lim     = 20000,
+  .counter_l_lim     = 0,
+  .unit              = PCNT_UNIT_2, 
+  .channel           = PCNT_CHANNEL_0
+};
+
+// ------------------------ FAN4 ------------------------
+
+bool            flag_fan4             = true;                                   
+uint32_t        overflow_cnt_fan4     = 0;                                        
+volatile double frequency_fan4        = 0;
+double          global_frequency_fan4 = 0;
+uint16_t        result_fan4           = 0;
+
+esp_timer_create_args_t timer_args_fan4;
+esp_timer_handle_t timer_handle_fan4;
+portMUX_TYPE timer_mux_fan4 = portMUX_INITIALIZER_UNLOCKED;
+
+pcnt_config_t pcnt_config_fan4 = 
+{
+  .pulse_gpio_num    = FREQ_PIN_FAN4,
+  .ctrl_gpio_num     = -1,
+  .lctrl_mode        = PCNT_MODE_KEEP,
+  .hctrl_mode        = PCNT_MODE_KEEP,
+  .pos_mode          = PCNT_COUNT_INC,
+  .neg_mode          = PCNT_COUNT_INC,
+  .counter_h_lim     = 20000,
+  .counter_l_lim     = 0,
+  .unit              = PCNT_UNIT_3, 
+  .channel           = PCNT_CHANNEL_0
+};
+
 // ------------------------ FUNCTION DEFINES ------------------------
 
 void configModeCallback(WiFiManager *myWiFiManager);
@@ -108,7 +187,7 @@ void firebaseConnect();
 
 void wifiTask(void *pvParameters);
 void resetButtonTask(void *pvParameters); 
-void fan1Task(void *pvParameters);
+void fanRpmTask(void *pvParameters);
 void firebaseTask(void *pvParameters);
 void pcnt_get_counter_fan1(void *p);
 void pcnt_init_fan1(void);
@@ -121,6 +200,8 @@ bool isWiFiConnected;
 bool wifiManagerNonblocking = false;
 bool isInConfigMode = false;
 bool isFirebaseConnected = false;
+
+// ------------------------ FAN1 INITIALIZATIONS ------------------------
 
 void IRAM_ATTR pcnt_event_handler_fan1(void *arg)
 {
@@ -161,6 +242,203 @@ void pcnt_init_fan1(void)
 
   timer_args_fan1.callback = pcnt_get_counter_fan1; 
   esp_timer_create(&timer_args_fan1, &timer_handle_fan1);
+}
+
+float calculateRpmFan1()
+{
+  if (flag_fan1 == true)
+  {
+    flag_fan1 = false;
+    frequency_fan1 =  result_fan1 + (overflow_cnt_fan1*20000); 
+    overflow_cnt_fan1 = 0; 
+    pcnt_counter_clear(PCNT_UNIT_0); 
+    pcnt_counter_resume(PCNT_UNIT_0); 
+    overflow_cnt_fan1 = 0;    
+    pcnt_counter_clear(PCNT_UNIT_0);
+    esp_timer_start_once(timer_handle_fan1, 1000000);
+  }
+  global_frequency_fan1 = frequency_fan1 * 15;
+  return frequency_fan1 * 15;
+}
+
+// ------------------------ FAN2 INITIALIZATIONS ------------------------
+
+void IRAM_ATTR pcnt_event_handler_fan2(void *arg)
+{
+  portENTER_CRITICAL_ISR(&timer_mux_fan2);
+  overflow_cnt_fan2++; 
+  PCNT.int_clr.val = BIT(PCNT_UNIT_1);
+  portEXIT_CRITICAL_ISR(&timer_mux_fan2);
+}     
+
+void pcnt_get_counter_fan2(void *p) 
+{ 
+  pcnt_counter_pause(PCNT_UNIT_1);
+  pcnt_get_counter_value(PCNT_UNIT_1, (int16_t*) &result_fan2); 
+  flag_fan2 = true;
+}
+
+void pcnt_init_fan2(void)                                                     
+{  
+  pinMode(FREQ_PIN_FAN2, INPUT_PULLUP); // TODO : INPUT 
+
+  pcnt_unit_config(&pcnt_config_fan2);
+  pcnt_isr_register(pcnt_event_handler_fan2, NULL, 0, NULL);
+  pcnt_set_filter_value(PCNT_UNIT_1, 1000);
+  pcnt_filter_enable(PCNT_UNIT_1);
+  pcnt_counter_pause(PCNT_UNIT_1);
+  pcnt_counter_clear(PCNT_UNIT_1);
+  pcnt_event_enable(PCNT_UNIT_1, PCNT_EVT_H_LIM);
+  pcnt_counter_resume(PCNT_UNIT_1);
+
+  timer_args_fan2.callback = pcnt_get_counter_fan2;
+  timer_args_fan2.arg      = NULL;
+  timer_args_fan2.name     = "one shot timer";
+
+  if(esp_timer_create(&timer_args_fan2, &timer_handle_fan2) != ESP_OK) 
+  {
+    //ESP_LOGE(TAG, "timer create");
+  }
+
+  timer_args_fan2.callback = pcnt_get_counter_fan2; 
+  esp_timer_create(&timer_args_fan2, &timer_handle_fan2);
+}
+
+float calculateRpmFan2()
+{
+  if (flag_fan2 == true)
+  {
+    flag_fan2 = false;
+    frequency_fan2 =  result_fan2 + (overflow_cnt_fan2*20000); 
+    overflow_cnt_fan2 = 0; 
+    pcnt_counter_clear(PCNT_UNIT_1); 
+    pcnt_counter_resume(PCNT_UNIT_1); 
+    overflow_cnt_fan2 = 0;    
+    pcnt_counter_clear(PCNT_UNIT_1);
+    esp_timer_start_once(timer_handle_fan2, 1000000);
+  }
+  global_frequency_fan2 = frequency_fan2 * 15;
+  return frequency_fan2 * 15;
+}
+
+// ------------------------ FAN3 INITIALIZATIONS ------------------------
+
+void IRAM_ATTR pcnt_event_handler_fan3(void *arg)
+{
+  portENTER_CRITICAL_ISR(&timer_mux_fan3);
+  overflow_cnt_fan3++; 
+  PCNT.int_clr.val = BIT(PCNT_UNIT_2);
+  portEXIT_CRITICAL_ISR(&timer_mux_fan3);
+}     
+
+void pcnt_get_counter_fan3(void *p) 
+{ 
+  pcnt_counter_pause(PCNT_UNIT_2);
+  pcnt_get_counter_value(PCNT_UNIT_2, (int16_t*) &result_fan3); 
+  flag_fan3 = true;
+}
+
+void pcnt_init_fan3(void)                                                     
+{  
+  pinMode(FREQ_PIN_FAN3, INPUT_PULLUP); // TODO : INPUT 
+
+  pcnt_unit_config(&pcnt_config_fan3);
+  pcnt_isr_register(pcnt_event_handler_fan3, NULL, 0, NULL);
+  pcnt_set_filter_value(PCNT_UNIT_2, 1000);
+  pcnt_filter_enable(PCNT_UNIT_2);
+  pcnt_counter_pause(PCNT_UNIT_2);
+  pcnt_counter_clear(PCNT_UNIT_2);
+  pcnt_event_enable(PCNT_UNIT_2, PCNT_EVT_H_LIM);
+  pcnt_counter_resume(PCNT_UNIT_2);
+
+  timer_args_fan3.callback = pcnt_get_counter_fan3;
+  timer_args_fan3.arg      = NULL;
+  timer_args_fan3.name     = "one shot timer";
+
+  if(esp_timer_create(&timer_args_fan3, &timer_handle_fan3) != ESP_OK) 
+  {
+    //ESP_LOGE(TAG, "timer create");
+  }
+
+  timer_args_fan3.callback = pcnt_get_counter_fan3; 
+  esp_timer_create(&timer_args_fan2, &timer_handle_fan3);
+}
+
+float calculateRpmFan3()
+{
+  if (flag_fan3 == true)
+  {
+    flag_fan3 = false;
+    frequency_fan3 =  result_fan3 + (overflow_cnt_fan3*20000); 
+    overflow_cnt_fan3 = 0; 
+    pcnt_counter_clear(PCNT_UNIT_2); 
+    pcnt_counter_resume(PCNT_UNIT_2); 
+    overflow_cnt_fan3 = 0;    
+    pcnt_counter_clear(PCNT_UNIT_2);
+    esp_timer_start_once(timer_handle_fan3, 1000000);
+  }
+  global_frequency_fan3 = frequency_fan3 * 15;
+  return frequency_fan3 * 15;
+}
+
+// ------------------------ FAN4 INITIALIZATIONS ------------------------
+
+void IRAM_ATTR pcnt_event_handler_fan4(void *arg)
+{
+  portENTER_CRITICAL_ISR(&timer_mux_fan4);
+  overflow_cnt_fan4++; 
+  PCNT.int_clr.val = BIT(PCNT_UNIT_3);
+  portEXIT_CRITICAL_ISR(&timer_mux_fan3);
+}     
+
+void pcnt_get_counter_fan4(void *p) 
+{ 
+  pcnt_counter_pause(PCNT_UNIT_3);
+  pcnt_get_counter_value(PCNT_UNIT_3, (int16_t*) &result_fan4); 
+  flag_fan4 = true;
+}
+
+void pcnt_init_fan4(void)                                                     
+{  
+  pinMode(FREQ_PIN_FAN4, INPUT_PULLUP); // TODO : INPUT 
+
+  pcnt_unit_config(&pcnt_config_fan4);
+  pcnt_isr_register(pcnt_event_handler_fan4, NULL, 0, NULL);
+  pcnt_set_filter_value(PCNT_UNIT_3, 1000);
+  pcnt_filter_enable(PCNT_UNIT_3);
+  pcnt_counter_pause(PCNT_UNIT_3);
+  pcnt_counter_clear(PCNT_UNIT_3);
+  pcnt_event_enable(PCNT_UNIT_3, PCNT_EVT_H_LIM);
+  pcnt_counter_resume(PCNT_UNIT_3);
+
+  timer_args_fan4.callback = pcnt_get_counter_fan4;
+  timer_args_fan4.arg      = NULL;
+  timer_args_fan4.name     = "one shot timer";
+
+  if(esp_timer_create(&timer_args_fan4, &timer_handle_fan4) != ESP_OK) 
+  {
+    //ESP_LOGE(TAG, "timer create");
+  }
+
+  timer_args_fan4.callback = pcnt_get_counter_fan4; 
+  esp_timer_create(&timer_args_fan4, &timer_handle_fan4);
+}
+
+float calculateRpmFan4()
+{
+  if (flag_fan4 == true)
+  {
+    flag_fan4 = false;
+    frequency_fan4 =  result_fan4 + (overflow_cnt_fan4*20000); 
+    overflow_cnt_fan4 = 0; 
+    pcnt_counter_clear(PCNT_UNIT_3); 
+    pcnt_counter_resume(PCNT_UNIT_3); 
+    overflow_cnt_fan4 = 0;    
+    pcnt_counter_clear(PCNT_UNIT_3);
+    esp_timer_start_once(timer_handle_fan4, 1000000);
+  }
+  global_frequency_fan4 = frequency_fan4 * 15;
+  return frequency_fan4 * 15;
 }
 
 void saveParamsCallback()
@@ -245,18 +523,21 @@ void resetButtonTask(void *pvParameters)
   }
 }
 
-void fan1Task(void *pvParameters) 
+void fanRpmTask(void *pvParameters) 
 {
-  while (1) 
+  while(1) 
   {
     calculateRpmFan1();
+    calculateRpmFan2();
+    calculateRpmFan3();
+    calculateRpmFan4();
     vTaskDelay(1000 / portTICK_RATE_MS);
   }
 }
 
 void firebaseTask(void *pvParameters) 
 {
-  while (1) 
+  while(1) 
   {
     if (isWiFiConnected && !isFirebaseConnected) 
     {
@@ -264,12 +545,10 @@ void firebaseTask(void *pvParameters)
     }
 
     vTaskDelay(500 / portTICK_RATE_MS); // maybe thats not necessary
-
     databaseStaticReadingsPath = UsersData + uid + readingsPath + staticReadingsPath;
 
     if(isWiFiConnected && isFirebaseConnected)
     {
-
       if (Firebase.ready())
       {
         sendDataPrevMillis = millis();
@@ -281,6 +560,10 @@ void firebaseTask(void *pvParameters)
         parentStaticReadingsPath = databaseStaticReadingsPath;
   
         jsonStatic.set("/fans/fan1", global_frequency_fan1);
+        jsonStatic.set("/fans/fan2", global_frequency_fan2);
+        jsonStatic.set("/fans/fan3", global_frequency_fan3);
+        jsonStatic.set("/fans/fan4", global_frequency_fan4);
+
         Serial.printf("Sending fan RPM value into Firebase %s\n", Firebase.RTDB.setJSON(&firebaseData, parentStaticReadingsPath.c_str(), &jsonStatic) ? "" : firebaseData.errorReason().c_str());
         vTaskDelay(4000 / portTICK_RATE_MS);
       }
@@ -291,8 +574,6 @@ void firebaseTask(void *pvParameters)
 
 void firebaseConnect() 
 {
-  //Firebase.reconnectNetwork(true);
-
   firebaseAuth.user.email = USER_EMAIL;
   firebaseAuth.user.password = USER_PASSWORD;
   firebaseConfig.database_url = DATABASE_URL;
@@ -303,7 +584,6 @@ void firebaseConnect()
   // TODO: TCP Keep Alive
 
   Firebase.begin(&firebaseConfig, &firebaseAuth);
-
   if (Firebase.ready()) 
   {
     uid = firebaseAuth.token.uid.c_str();
@@ -447,25 +727,10 @@ void setup()
   xTaskCreatePinnedToCore(wifiTask,        "WiFi Task",         10000, NULL, 1, &wifiTaskHandle,     0);
   xTaskCreatePinnedToCore(resetButtonTask, "Reset Button Task", 10000, NULL, 1, &resetButtonHandle , 0);
   xTaskCreatePinnedToCore(firebaseTask,    "Firebase Task",     10000, NULL, 1, &firebaseTaskHandle, 0);
-  xTaskCreatePinnedToCore(fan1Task,        "Fan1 Task",         10000, NULL, 1, &sensorTaskHandle,   0);
+  xTaskCreatePinnedToCore(fanRpmTask,      "Fan Task",          10000, NULL, 1, &sensorTaskHandle,   0);
 }
 
-float calculateRpmFan1()
-{
-  if (flag_fan1 == true)
-  {
-    flag_fan1 = false;
-    frequency_fan1 =  result_fan1 + (overflow_cnt_fan1*20000); 
-    overflow_cnt_fan1 = 0; 
-    pcnt_counter_clear(PCNT_UNIT_0); 
-    pcnt_counter_resume(PCNT_UNIT_0); 
-    overflow_cnt_fan1 = 0;    
-    pcnt_counter_clear(PCNT_UNIT_0);
-    esp_timer_start_once(timer_handle_fan1, 1000000);
-  }
-  global_frequency_fan1 = frequency_fan1 * 15;
-  return frequency_fan1 * 15;
-}
+
 
 void loop() 
 {
